@@ -1,0 +1,21 @@
+# Node
+node_modules/
+frontend/dist/
+frontend/dist-ssr/
+*.local
+
+# Go
+product-service/product-service
+order-service/order-service
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# OS
+.DS_Store
+.idea/
+.vscode/

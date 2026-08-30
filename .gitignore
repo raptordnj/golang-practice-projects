@@ -1,0 +1,30 @@
+# Binaries and executables
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+__debug_bin*
+sysmon
+midi2mmf
+web_server/web_server
+
+# Node / Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# IDE and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~

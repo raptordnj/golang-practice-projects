@@ -1,0 +1,29 @@
+# Go Web Server Configuration
+
+server:
+  # Port to listen on
+  port: "8080"
+
+# The default virtual host if no specific domain matches the request's Host header
+default_vhost:
+  static_dir: "./static"
+  fpm_network: "unix"
+  fpm_address: "/run/php/php-fpm.sock" # Defaults to your php8.5-fpm.sock symlink
+
+# You can define multiple domains (Virtual Hosts) here
+vhosts:
+  # Example: Running the main site on PHP 8.5
+  "localhost":
+    static_dir: "./static"
+    fpm_network: "unix"
+    fpm_address: "/run/php/php8.5-fpm.sock"
+    
+  # Example: Running a legacy site on PHP 8.4
+  "legacy.local":
+    static_dir: "./static_legacy"
+    fpm_network: "unix"
+    fpm_address: "/run/php/php8.4-fpm.sock"
+
+  # Example: Reverse Proxy to a Node.js or Python backend
+  "api.local":
+    proxy_pass: "http://127.0.0.1:3000"

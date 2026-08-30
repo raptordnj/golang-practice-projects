@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mariadb-init-scripts
+data:
+  init.sql: |
+    CREATE DATABASE IF NOT EXISTS ecommerce_product;
+    CREATE DATABASE IF NOT EXISTS ecommerce_order;
+    GRANT ALL PRIVILEGES ON ecommerce_product.* TO 'root'@'%';
+    GRANT ALL PRIVILEGES ON ecommerce_order.* TO 'root'@'%';
+    FLUSH PRIVILEGES;
+
+    USE ecommerce_product;
+    CREATE TABLE IF NOT EXISTS products (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        price DECIMAL(10,2) NOT NULL
+    );
+    INSERT IGNORE INTO products (id, name, price) VALUES (1, 'Premium Laptop', 1299.99), (2, 'Wireless Mouse', 49.99);
+
+    USE ecommerce_order;
+    CREATE TABLE IF NOT EXISTS orders (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        product_id INT NOT NULL,
+        quantity INT NOT NULL,
+        total DECIMAL(10,2) NOT NULL
+    );
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ecommerce-db-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ecommerce-db
+spec:
+  selector:
+    matchLabels:
+      app: ecommerce-db
+  template:
+    metadata:
+      labels:
+        app: ecommerce-db
+    spec:
+      containers:
+        - name: mariadb
+          image: mysql:8.0
+          ports:
+            - containerPort: 3306
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: MYSQL_ROOT_PASSWORD
+          livenessProbe:
+            exec:
+              command: ["mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$(MYSQL_ROOT_PASSWORD)"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$(MYSQL_ROOT_PASSWORD)"]
+            initialDelaySeconds: 15
+            periodSeconds: 5
+          volumeMounts:
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+            - name: db-data
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: init-scripts
+          configMap:
+            name: mariadb-init-scripts
+        - name: db-data
+          persistentVolumeClaim:
+            claimName: ecommerce-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ecommerce-db
+spec:
+  ports:
+    - port: 8706
+      targetPort: 3306
+  selector:
+    app: ecommerce-db
