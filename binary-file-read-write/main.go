@@ -4,38 +4,36 @@ import (
 	"bufio"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"os"
-	"strings"
 )
 
 func main() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter your text:")
-	text, _ := reader.ReadString('\n')
-	text = strings.TrimSpace(text)
-	file, err := os.Create("data.bin")
+	inputReader := bufio.NewReader(os.Stdin)
+	fmt.Print("Enter text: ")
+	text, _ := inputReader.ReadString('\n')
+
+	file, err := os.Create("datum.bin")
 
 	if err != nil {
-		panic(err)
+		fmt.Println("Error creating file:", err)
+		return
 	}
-
-	length := int32(len(text))
-	binary.Write(file, binary.LittleEndian, length)
-	file.Write([]byte(text))
-	defer file.Close()
-	fmt.Println("Write to data.bin as real binary file")
-
-	file, err = os.Open("data.bin")
-
-	if err != nil {
-		panic(err)
-	}
-
-	var l int32
-	binary.Read(file, binary.BigEndian, &l)
-	buf := make([]byte, l)
-	io.ReadFull(file, buf)
-	fmt.Println(string(buf))
+	binaryData := []byte(text)
+	binary.Write(file, binary.BigEndian, int32(len(text)))
+	file.Write(binaryData)
 	file.Close()
+	fmt.Println("Text written to datum.bin successfully.")
+
+	file, err = os.Open("datum.bin")
+	if err != nil {
+		fmt.Println("Error opening file:", err)
+		return
+	}
+	defer file.Close()
+	var length int32
+	binary.Read(file, binary.BigEndian, &length)
+	data := make([]byte, length)
+	file.Read(data)
+	fmt.Println("Retrieved text:", string(data))
+
 }
