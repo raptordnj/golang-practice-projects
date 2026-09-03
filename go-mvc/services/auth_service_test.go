@@ -2,10 +2,15 @@ package services
 
 import (
 	"errors"
+	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"go-mvc/dto"
 	"go-mvc/models"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type mockUserRepository struct {
@@ -248,5 +253,90 @@ func TestAuthService_NewAuthService_FallbackSecret(t *testing.T) {
 	}
 	if claims.Subject != "10" {
 		t.Errorf("Expected subject '10', got '%s'", claims.Subject)
+	}
+}
+
+func TestAuthService_ValidateToken_Expired(t *testing.T) {
+	repo := newMockUserRepository()
+	authService := NewAuthService(repo, "test-secret-key")
+
+	claims := jwt.RegisteredClaims{
+		Subject:   "1",
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(-1 * time.Hour)),
+		IssuedAt:  jwt.NewNumericDate(time.Now().Add(-2 * time.Hour)),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte("test-secret-key"))
+	if err != nil {
+		t.Fatalf("Failed to sign expired token: %v", err)
+	}
+
+	_, err = authService.ValidateToken(tokenString)
+	if err == nil {
+		t.Errorf("Expected error for expired token, got nil")
+	}
+}
+
+func TestAuthService_NilInputs_And_PasswordLength(t *testing.T) {
+	repo := newMockUserRepository()
+	authService := NewAuthService(repo, "test-secret-key")
+
+	// Nil request on Register
+	_, err := authService.Register(nil)
+	if err == nil || err.Error() != "request cannot be nil" {
+		t.Errorf("Expected 'request cannot be nil', got %v", err)
+	}
+
+	// Nil request on Login
+	_, err = authService.Login(nil)
+	if err == nil || err.Error() != "request cannot be nil" {
+		t.Errorf("Expected 'request cannot be nil', got %v", err)
+	}
+
+	// Nil user on GenerateToken
+	_, err = authService.GenerateToken(nil)
+	if err == nil || err.Error() != "user cannot be nil" {
+		t.Errorf("Expected 'user cannot be nil', got %v", err)
+	}
+
+	// Password exceeding 72 bytes on Register
+	longPassword := strings.Repeat("a", 73)
+	_, err = authService.Register(&dto.RegisterRequest{
+		Name:     "Long Pass",
+		Email:    "longpass@example.com",
+		Password: longPassword,
+	})
+	if err == nil || err.Error() != "password cannot exceed 72 bytes" {
+		t.Errorf("Expected 'password cannot exceed 72 bytes', got %v", err)
+	}
+
+	// Password exceeding 72 bytes on Login
+	_, err = authService.Login(&dto.LoginRequest{
+		Email:    "longpass@example.com",
+		Password: longPassword,
+	})
+	if err == nil || err.Error() != "password cannot exceed 72 bytes" {
+		t.Errorf("Expected 'password cannot exceed 72 bytes', got %v", err)
+	}
+}
+
+func TestAuthService_NewAuthService_EnvSecret(t *testing.T) {
+	repo := newMockUserRepository()
+	os.Setenv("JWT_SECRET", "custom_env_secret")
+	defer os.Unsetenv("JWT_SECRET")
+
+	svc := NewAuthService(repo, "")
+	user := &models.User{Id: 99, Email: "env@example.com"}
+	token, err := svc.GenerateToken(user)
+	if err != nil {
+		t.Fatalf("GenerateToken failed: %v", err)
+	}
+
+	claims, err := svc.ValidateToken(token)
+	if err != nil {
+		t.Fatalf("ValidateToken failed with env secret: %v", err)
+	}
+	if claims.Subject != "99" {
+		t.Errorf("Expected subject '99', got '%s'", claims.Subject)
 	}
 }

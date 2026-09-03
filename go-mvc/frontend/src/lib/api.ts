@@ -3,7 +3,6 @@ import {
   CreateEmployeePayload,
   UpdateEmployeePayload,
   PaginatedResponse,
-  SingleResponse,
 } from "@/types/employee";
 import { AuthResponse, LoginPayload, RegisterPayload, User } from "@/types/auth";
 
@@ -46,9 +45,9 @@ export async function loginApi(payload: LoginPayload): Promise<AuthResponse> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const json = await res.json();
+  const json = await res.json().catch(() => ({}));
   if (!res.ok || !json.success) {
-    throw new Error(json.message || "Failed to log in");
+    throw new Error(json.message || res.statusText || "Failed to log in");
   }
   return json.data;
 }
@@ -59,9 +58,9 @@ export async function registerApi(payload: RegisterPayload): Promise<AuthRespons
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const json = await res.json();
+  const json = await res.json().catch(() => ({}));
   if (!res.ok || !json.success) {
-    throw new Error(json.message || "Failed to register");
+    throw new Error(json.message || res.statusText || "Failed to register");
   }
   return json.data;
 }
@@ -71,9 +70,9 @@ export async function fetchCurrentUser(): Promise<User> {
     headers: getAuthHeaders(),
     cache: "no-store",
   });
-  const json = await res.json();
+  const json = await res.json().catch(() => ({}));
   if (!res.ok || !json.success) {
-    throw new Error(json.message || "Failed to fetch current user");
+    throw new Error(json.message || res.statusText || "Failed to fetch current user");
   }
   return json.data;
 }
@@ -86,11 +85,11 @@ export async function fetchEmployees(
     headers: getAuthHeaders(),
     cache: "no-store",
   });
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.message || `Failed to fetch employees: ${res.statusText}`);
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.success) {
+    throw new Error(json.message || res.statusText || "Failed to fetch employees");
   }
-  return res.json();
+  return json;
 }
 
 export async function fetchEmployeeById(id: number): Promise<Employee> {
@@ -98,11 +97,10 @@ export async function fetchEmployeeById(id: number): Promise<Employee> {
     headers: getAuthHeaders(),
     cache: "no-store",
   });
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.message || `Failed to fetch employee: ${res.statusText}`);
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.success) {
+    throw new Error(json.message || res.statusText || "Failed to fetch employee");
   }
-  const json: SingleResponse<Employee> = await res.json();
   return json.data;
 }
 
@@ -114,9 +112,9 @@ export async function createEmployee(
     headers: getAuthHeaders(),
     body: JSON.stringify(payload),
   });
-  const json = await res.json();
+  const json = await res.json().catch(() => ({}));
   if (!res.ok || !json.success) {
-    throw new Error(json.message || "Failed to create employee");
+    throw new Error(json.message || res.statusText || "Failed to create employee");
   }
   return json.data;
 }
@@ -130,9 +128,9 @@ export async function updateEmployee(
     headers: getAuthHeaders(),
     body: JSON.stringify(payload),
   });
-  const json = await res.json();
+  const json = await res.json().catch(() => ({}));
   if (!res.ok || !json.success) {
-    throw new Error(json.message || "Failed to update employee");
+    throw new Error(json.message || res.statusText || "Failed to update employee");
   }
   return json.data;
 }
@@ -142,8 +140,8 @@ export async function deleteEmployee(id: number): Promise<void> {
     method: "DELETE",
     headers: getAuthHeaders(),
   });
-  const json = await res.json();
+  const json = await res.json().catch(() => ({}));
   if (!res.ok || !json.success) {
-    throw new Error(json.message || "Failed to delete employee");
+    throw new Error(json.message || res.statusText || "Failed to delete employee");
   }
 }

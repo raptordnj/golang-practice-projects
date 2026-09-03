@@ -1,14 +1,20 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { Users, Lock, Mail, User as UserIcon, ArrowRight } from "lucide-react";
 
 export default function RegisterPage() {
-  const { register } = useAuth();
+  const { user, isLoading, register } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoading && user) {
+      router.push("/");
+    }
+  }, [user, isLoading, router]);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

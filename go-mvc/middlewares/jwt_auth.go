@@ -20,12 +20,12 @@ func JWTAuthFilter(authService services.AuthService) func(ctx *beegoCtx.Context)
 		}
 
 		authHeader := ctx.Input.Header("Authorization")
-		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+		if authHeader == "" || !strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
 			respondUnauthorized(ctx, "Authorization token is missing or malformed")
 			return
 		}
 
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		tokenString := strings.TrimSpace(authHeader[7:])
 		claims, err := authService.ValidateToken(tokenString)
 		if err != nil {
 			respondUnauthorized(ctx, "Invalid or expired token")

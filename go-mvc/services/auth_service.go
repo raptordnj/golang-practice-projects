@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -33,15 +34,13 @@ type authService struct {
 // NewAuthService creates a new AuthService instance
 func NewAuthService(repo repositories.UserRepository, secret string) AuthService {
 	if secret == "" {
-		if web.AppConfig != nil {
-			cfgSecret, _ := web.AppConfig.String("jwt_secret")
-			if cfgSecret != "" {
-				secret = cfgSecret
-			}
-		}
-		if secret == "" {
-			secret = "workpulse_super_secret_jwt_key_2026"
-		}
+		secret = os.Getenv("JWT_SECRET")
+	}
+	if secret == "" && web.AppConfig != nil {
+		secret, _ = web.AppConfig.String("jwt_secret")
+	}
+	if secret == "" {
+		secret = "workpulse_super_secret_jwt_key_2026"
 	}
 	return &authService{
 		repo:      repo,
@@ -51,6 +50,10 @@ func NewAuthService(repo repositories.UserRepository, secret string) AuthService
 
 // Register creates a new user and issues a JWT token
 func (s *authService) Register(req *dto.RegisterRequest) (*dto.AuthResponse, error) {
+	if req == nil {
+		return nil, errors.New("request cannot be nil")
+	}
+
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	req.Name = strings.TrimSpace(req.Name)
 
@@ -62,6 +65,9 @@ func (s *authService) Register(req *dto.RegisterRequest) (*dto.AuthResponse, err
 	}
 	if len(req.Password) < 6 {
 		return nil, errors.New("password must be at least 6 characters long")
+	}
+	if len(req.Password) > 72 {
+		return nil, errors.New("password cannot exceed 72 bytes")
 	}
 
 	// Check existing user
@@ -102,9 +108,16 @@ func (s *authService) Register(req *dto.RegisterRequest) (*dto.AuthResponse, err
 
 // Login validates user credentials and issues a JWT token
 func (s *authService) Login(req *dto.LoginRequest) (*dto.AuthResponse, error) {
+	if req == nil {
+		return nil, errors.New("request cannot be nil")
+	}
+
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 	if email == "" || req.Password == "" {
 		return nil, errors.New("email and password are required")
+	}
+	if len(req.Password) > 72 {
+		return nil, errors.New("password cannot exceed 72 bytes")
 	}
 
 	user, err := s.repo.FindByEmail(email)
@@ -148,6 +161,10 @@ func (s *authService) GetUserByID(id int) (*dto.UserResponse, error) {
 
 // GenerateToken generates a signed JWT token valid for 24 hours
 func (s *authService) GenerateToken(user *models.User) (string, error) {
+	if user == nil {
+		return "", errors.New("user cannot be nil")
+	}
+
 	claims := jwt.RegisteredClaims{
 		Subject:   strconv.Itoa(user.Id),
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
