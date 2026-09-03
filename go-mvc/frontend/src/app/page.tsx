@@ -11,6 +11,8 @@ import { EmployeeTable } from "@/components/employee/EmployeeTable";
 import { EmployeeModal } from "@/components/employee/EmployeeModal";
 import { DeleteConfirmModal } from "@/components/employee/DeleteConfirmModal";
 import { useToast } from "@/components/ui/toast";
+import { AuthGuard } from "@/components/auth/AuthGuard";
+import { useAuth } from "@/context/AuthContext";
 import {
   Plus,
   Search,
@@ -23,10 +25,12 @@ import {
   CheckCircle,
   Database,
   Building2,
+  LogOut,
 } from "lucide-react";
 
 export default function Home() {
   const { toast } = useToast();
+  const { user, logout } = useAuth();
 
   const [employees, setEmployees] = React.useState<Employee[]>([]);
   const [totalCount, setTotalCount] = React.useState<number>(0);
@@ -66,8 +70,10 @@ export default function Home() {
   }, [toast]);
 
   React.useEffect(() => {
-    loadEmployees();
-  }, [loadEmployees]);
+    if (user) {
+      loadEmployees();
+    }
+  }, [loadEmployees, user]);
 
   // Handle Create or Update
   const handleSaveEmployee = async (data: CreateEmployeePayload | UpdateEmployeePayload) => {
@@ -150,7 +156,8 @@ export default function Home() {
   }, [employees, searchQuery, selectedDept, selectedStatus]);
 
   return (
-    <div className="min-h-screen bg-slate-50 bg-mesh-pattern font-sans text-slate-900 pb-16">
+    <AuthGuard>
+      <div className="min-h-screen bg-slate-50 bg-mesh-pattern font-sans text-slate-900 pb-16">
       {/* Top Navigation Bar */}
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/80 backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -218,6 +225,38 @@ export default function Home() {
                 <Plus className="h-4 w-4" />
                 <span>Add Employee</span>
               </Button>
+
+              {/* User Avatar & Logout */}
+              {user && (
+                <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="h-8 w-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-semibold text-xs shadow-sm"
+                      title={user.email}
+                    >
+                      {(user.name?.[0] || user.email[0] || "U").toUpperCase()}
+                    </div>
+                    <div className="hidden lg:block text-left">
+                      <p className="text-xs font-semibold text-slate-800 leading-tight">
+                        {user.name || user.email}
+                      </p>
+                      <p className="text-[10px] text-slate-400 leading-tight truncate max-w-[120px]">
+                        {user.email}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={logout}
+                    className="h-8 px-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                    title="Sign Out"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span className="hidden sm:inline text-xs">Logout</span>
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -420,5 +459,6 @@ export default function Home() {
         onConfirm={handleDeleteConfirm}
       />
     </div>
+    </AuthGuard>
   );
 }
