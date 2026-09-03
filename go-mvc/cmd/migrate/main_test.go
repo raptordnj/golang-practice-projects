@@ -35,13 +35,13 @@ func TestMigrationLifecycle(t *testing.T) {
 		t.Fatalf("m.Up() failed: %v", err)
 	}
 
-	// 2. Check version is 1, not dirty
+	// 2. Check version is >= 1, not dirty
 	version, dirty, err := m.Version()
 	if err != nil {
 		t.Fatalf("m.Version() failed: %v", err)
 	}
-	if version != 1 {
-		t.Errorf("expected version 1, got %d", version)
+	if version < 1 {
+		t.Errorf("expected version >= 1, got %d", version)
 	}
 	if dirty {
 		t.Errorf("expected dirty=false, got true")
@@ -53,10 +53,19 @@ func TestMigrationLifecycle(t *testing.T) {
 		t.Fatalf("m.Steps(-1) failed: %v", err)
 	}
 
-	// 4. Verify version is now nil
-	_, _, err = m.Version()
-	if !errors.Is(err, migrate.ErrNilVersion) {
-		t.Fatalf("expected ErrNilVersion after rollback, got %v", err)
+	// 4. Verify version after rollback of 1 step
+	prevVersion, prevDirty, err := m.Version()
+	if version == 1 {
+		if !errors.Is(err, migrate.ErrNilVersion) {
+			t.Fatalf("expected ErrNilVersion after rollback, got %v", err)
+		}
+	} else {
+		if err != nil {
+			t.Fatalf("m.Version() after rollback failed: %v", err)
+		}
+		if prevVersion != version-1 || prevDirty {
+			t.Errorf("expected version %d, dirty false, got version %d, dirty %v", version-1, prevVersion, prevDirty)
+		}
 	}
 
 	// 5. Re-apply migration
@@ -65,12 +74,12 @@ func TestMigrationLifecycle(t *testing.T) {
 		t.Fatalf("re-applying m.Up() failed: %v", err)
 	}
 
-	// 6. Verify version is 1 again
-	version, dirty, err = m.Version()
+	// 6. Verify version is restored
+	restoredVersion, restoredDirty, err := m.Version()
 	if err != nil {
 		t.Fatalf("m.Version() after re-up failed: %v", err)
 	}
-	if version != 1 || dirty {
-		t.Errorf("expected version 1, dirty false, got version %d, dirty %v", version, dirty)
+	if restoredVersion != version || restoredDirty {
+		t.Errorf("expected version %d, dirty false, got version %d, dirty %v", version, restoredVersion, restoredDirty)
 	}
 }
