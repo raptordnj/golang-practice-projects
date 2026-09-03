@@ -35,18 +35,24 @@ func (r *userRepository) Create(user *models.User) error {
 func (r *userRepository) FindByEmail(email string) (*models.User, error) {
 	user := &models.User{Email: email}
 	err := r.o.Read(user, "Email")
-	if errors.Is(err, orm.ErrNoRows) {
-		return nil, errors.New("user not found")
+	if err != nil {
+		if errors.Is(err, orm.ErrNoRows) {
+			return nil, errors.New("user not found")
+		}
+		return nil, err
 	}
-	return user, err
+	return user, nil
 }
 
 // FindByID retrieves a user by ID
 func (r *userRepository) FindByID(id int) (*models.User, error) {
 	user := &models.User{Id: id}
 	err := r.o.Read(user)
-	if errors.Is(err, orm.ErrNoRows) {
-		return nil, errors.New("user not found")
+	if err != nil {
+		if errors.Is(err, orm.ErrNoRows) {
+			return nil, errors.New("user not found")
+		}
+		return nil, err
 	}
-	return user, err
+	return user, nil
 }
