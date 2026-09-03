@@ -200,34 +200,7 @@ func (m *Migrator) Rollback(step int) error {
 		return err
 	}
 
-	if len(toRollback) == 0 {
-		fmt.Println("Nothing to rollback.")
-		return nil
-	}
-
-	for _, name := range toRollback {
-		fmt.Printf("Rolling back: %s\n", name)
-		start := time.Now()
-
-		downFile := name + ".down.sql"
-		content, err := fs.ReadFile(m.fsys, downFile)
-		if err != nil {
-			return fmt.Errorf("failed to read rollback file %s: %w", downFile, err)
-		}
-
-		if err := m.executeStatements(string(content)); err != nil {
-			return fmt.Errorf("failed to execute rollback %s: %w", name, err)
-		}
-
-		_, err = m.db.Exec("DELETE FROM `migrations` WHERE `migration` = ?", name)
-		if err != nil {
-			return fmt.Errorf("failed to delete migration record %s: %w", name, err)
-		}
-
-		fmt.Printf("Rolled back:  %s (%s)\n", name, time.Since(start).Round(time.Millisecond))
-	}
-
-	return nil
+	return m.rollbackList(toRollback)
 }
 
 // Reset rolls back all migrations ever applied
@@ -254,6 +227,10 @@ func (m *Migrator) Reset() error {
 		return err
 	}
 
+	return m.rollbackList(toRollback)
+}
+
+func (m *Migrator) rollbackList(toRollback []string) error {
 	if len(toRollback) == 0 {
 		fmt.Println("Nothing to rollback.")
 		return nil
@@ -284,7 +261,7 @@ func (m *Migrator) Reset() error {
 	return nil
 }
 
-// Refresh rolls back the latest batch (or step) and runs migrate
+// Refresh rolls back all migrations (or step migrations if step > 0) and re-runs migrate.
 func (m *Migrator) Refresh(step int) error {
 	var err error
 	if step > 0 {
@@ -345,7 +322,8 @@ func (m *Migrator) dropAllTables(dbName string) error {
 	}
 
 	for _, table := range tables {
-		dropQuery := fmt.Sprintf("DROP TABLE IF EXISTS `%s`;", table)
+		escapedTable := strings.ReplaceAll(table, "`", "``")
+		dropQuery := fmt.Sprintf("DROP TABLE IF EXISTS `%s`;", escapedTable)
 		if _, err := conn.ExecContext(ctx, dropQuery); err != nil {
 			return fmt.Errorf("failed to drop table %s: %w", table, err)
 		}
@@ -385,15 +363,12 @@ func (m *Migrator) Status() ([]MigrationStatus, error) {
 }
 
 func (m *Migrator) executeStatements(sqlContent string) error {
-	statements := strings.Split(sqlContent, ";")
-	for _, stmt := range statements {
-		trimmed := strings.TrimSpace(stmt)
-		if trimmed == "" {
-			continue
-		}
-		if _, err := m.db.Exec(trimmed); err != nil {
-			return fmt.Errorf("executing SQL statement failed: %w (SQL: %s)", err, trimmed)
-		}
+	trimmed := strings.TrimSpace(sqlContent)
+	if trimmed == "" {
+		return nil
+	}
+	if _, err := m.db.Exec(trimmed); err != nil {
+		return fmt.Errorf("executing SQL statement failed: %w (SQL: %s)", err, trimmed)
 	}
 	return nil
 }
