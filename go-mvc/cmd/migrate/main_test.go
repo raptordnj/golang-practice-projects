@@ -1,10 +1,12 @@
 package main
 
 import (
-	"errors"
+	"database/sql"
+	"fmt"
 	"testing"
 
-	"github.com/golang-migrate/migrate/v4"
+	"go-mvc/cmd/migrate/migrator"
+	"go-mvc/migrations"
 )
 
 func TestLoadConfig(t *testing.T) {
@@ -20,66 +22,72 @@ func TestLoadConfig(t *testing.T) {
 	}
 }
 
-func TestMigrationLifecycle(t *testing.T) {
+func TestLaravelMigrationLifecycle(t *testing.T) {
 	cfg := loadConfig()
-	m, db, err := getMigrator(cfg)
+	testDBName := cfg.Name + "_test"
+	cfg.Name = testDBName
+
+	if err := ensureDatabaseExists(cfg); err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=true&loc=Local&multiStatements=true",
+		cfg.User, cfg.Password, cfg.Host, cfg.Port, testDBName)
+
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		t.Skipf("Skipping migration integration test (DB not available): %v", err)
-		return
+		t.Fatalf("Failed to connect to test database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+		serverDSN := fmt.Sprintf("%s:%s@tcp(%s:%s)/", cfg.User, cfg.Password, cfg.Host, cfg.Port)
+		if rootDB, err := sql.Open("mysql", serverDSN); err == nil {
+			_, _ = rootDB.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS `%s`;", testDBName))
+			_ = rootDB.Close()
+		}
+	}()
 
-	// 1. Apply all migrations
-	err = m.Up()
-	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		t.Fatalf("m.Up() failed: %v", err)
+	mgr := migrator.New(db, migrations.FS)
+
+	// 1. Initial Fresh / Migrate
+	if err := mgr.Fresh(testDBName); err != nil {
+		t.Fatalf("Fresh migration failed: %v", err)
 	}
 
-	// 2. Check version is >= 1, not dirty
-	version, dirty, err := m.Version()
+	// 2. Verify Status
+	statuses, err := mgr.Status()
 	if err != nil {
-		t.Fatalf("m.Version() failed: %v", err)
+		t.Fatalf("Status failed: %v", err)
 	}
-	if version < 1 {
-		t.Errorf("expected version >= 1, got %d", version)
+	if len(statuses) < 2 {
+		t.Fatalf("Expected at least 2 migrations, got %d", len(statuses))
 	}
-	if dirty {
-		t.Errorf("expected dirty=false, got true")
-	}
-
-	// 3. Rollback 1 step
-	err = m.Steps(-1)
-	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		t.Fatalf("m.Steps(-1) failed: %v", err)
-	}
-
-	// 4. Verify version after rollback of 1 step
-	prevVersion, prevDirty, err := m.Version()
-	if version == 1 {
-		if !errors.Is(err, migrate.ErrNilVersion) {
-			t.Fatalf("expected ErrNilVersion after rollback, got %v", err)
+	for _, s := range statuses {
+		if !s.Ran {
+			t.Errorf("Expected migration %s to have ran", s.Migration)
 		}
-	} else {
-		if err != nil {
-			t.Fatalf("m.Version() after rollback failed: %v", err)
-		}
-		if prevVersion != version-1 || prevDirty {
-			t.Errorf("expected version %d, dirty false, got version %d, dirty %v", version-1, prevVersion, prevDirty)
+		if s.Batch == nil || *s.Batch != 1 {
+			t.Errorf("Expected migration %s to be in batch 1, got %v", s.Migration, s.Batch)
 		}
 	}
 
-	// 5. Re-apply migration
-	err = m.Up()
-	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		t.Fatalf("re-applying m.Up() failed: %v", err)
+	// 3. Rollback last batch (batch 1)
+	if err := mgr.Rollback(0); err != nil {
+		t.Fatalf("Rollback failed: %v", err)
 	}
 
-	// 6. Verify version is restored
-	restoredVersion, restoredDirty, err := m.Version()
+	statusesAfterRollback, err := mgr.Status()
 	if err != nil {
-		t.Fatalf("m.Version() after re-up failed: %v", err)
+		t.Fatalf("Status after rollback failed: %v", err)
 	}
-	if restoredVersion != version || restoredDirty {
-		t.Errorf("expected version %d, dirty false, got version %d, dirty %v", version, restoredVersion, restoredDirty)
+	for _, s := range statusesAfterRollback {
+		if s.Ran {
+			t.Errorf("Expected migration %s to be rolled back", s.Migration)
+		}
+	}
+
+	// 4. Re-migrate
+	if err := mgr.Migrate(); err != nil {
+		t.Fatalf("Re-migrate failed: %v", err)
 	}
 }
