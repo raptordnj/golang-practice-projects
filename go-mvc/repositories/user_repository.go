@@ -19,22 +19,33 @@ type userRepository struct {
 }
 
 // NewUserRepository creates a new UserRepository instance
-func NewUserRepository() UserRepository {
-	return &userRepository{
-		o: orm.NewOrm(),
+func NewUserRepository(o ...orm.Ormer) UserRepository {
+	var ormer orm.Ormer
+	if len(o) > 0 {
+		ormer = o[0]
 	}
+	return &userRepository{
+		o: ormer,
+	}
+}
+
+func (r *userRepository) orm() orm.Ormer {
+	if r.o != nil {
+		return r.o
+	}
+	return orm.NewOrm()
 }
 
 // Create inserts a new user record
 func (r *userRepository) Create(user *models.User) error {
-	_, err := r.o.Insert(user)
+	_, err := r.orm().Insert(user)
 	return err
 }
 
 // FindByEmail retrieves a user by email address
 func (r *userRepository) FindByEmail(email string) (*models.User, error) {
 	user := &models.User{Email: email}
-	err := r.o.Read(user, "Email")
+	err := r.orm().Read(user, "Email")
 	if err != nil {
 		if errors.Is(err, orm.ErrNoRows) {
 			return nil, errors.New("user not found")
@@ -47,7 +58,7 @@ func (r *userRepository) FindByEmail(email string) (*models.User, error) {
 // FindByID retrieves a user by ID
 func (r *userRepository) FindByID(id int) (*models.User, error) {
 	user := &models.User{Id: id}
-	err := r.o.Read(user)
+	err := r.orm().Read(user)
 	if err != nil {
 		if errors.Is(err, orm.ErrNoRows) {
 			return nil, errors.New("user not found")
