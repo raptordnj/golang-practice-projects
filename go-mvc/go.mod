@@ -5,7 +5,9 @@ go 1.24.0
 require (
 	github.com/beego/beego/v2 v2.3.4
 	github.com/go-sql-driver/mysql v1.8.1
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang-migrate/migrate/v4 v4.19.1
+	golang.org/x/crypto v0.45.0
 )
 
 require (
@@ -21,7 +23,6 @@ require (
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/shiena/ansicolor v0.0.0-20200904210342-c7312218db18 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
