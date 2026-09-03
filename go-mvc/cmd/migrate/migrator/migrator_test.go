@@ -21,6 +21,17 @@ func TestRenderStatusTable(t *testing.T) {
 	if !strings.Contains(rendered, "2026_09_03_000001_create_employees_table") {
 		t.Errorf("Expected status table to contain migration name, got:\n%s", rendered)
 	}
+
+	lines := strings.Split(rendered, "\n")
+	if len(lines) == 0 {
+		t.Fatalf("Expected rendered table to contain lines")
+	}
+	firstLineLen := len(lines[0])
+	for i, line := range lines {
+		if len(line) != firstLineLen {
+			t.Errorf("Line %d length %d != first line length %d: %q", i, len(line), firstLineLen, line)
+		}
+	}
 }
 
 func TestRenderStatusTableEmpty(t *testing.T) {

@@ -25,8 +25,8 @@ func RenderStatusTable(statuses []MigrationStatus) string {
 		}
 	}
 
-	border := fmt.Sprintf("+------+-%s-+-------+", strings.Repeat("-", maxNameLen))
-	header := fmt.Sprintf("| Ran? | %-*s | Batch |", maxNameLen, "Migration")
+	border := fmt.Sprintf("+------+-%s-+---------+", strings.Repeat("-", maxNameLen))
+	header := fmt.Sprintf("| Ran? | %-*s | Batch   |", maxNameLen, "Migration")
 
 	var sb strings.Builder
 	sb.WriteString(border + "\n")
@@ -42,7 +42,7 @@ func RenderStatusTable(statuses []MigrationStatus) string {
 				batchStr = fmt.Sprintf("%d", *s.Batch)
 			}
 		}
-		sb.WriteString(fmt.Sprintf("| %-4s | %-*s | %-5s |\n", ranStr, maxNameLen, s.Migration, batchStr))
+		sb.WriteString(fmt.Sprintf("| %-4s | %-*s | %-7s |\n", ranStr, maxNameLen, s.Migration, batchStr))
 	}
 
 	sb.WriteString(border)

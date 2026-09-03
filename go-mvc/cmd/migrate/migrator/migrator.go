@@ -1,6 +1,7 @@
 package migrator
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"io/fs"
@@ -170,7 +171,10 @@ func (m *Migrator) Rollback(step int) error {
 	} else {
 		var lastBatch sql.NullInt64
 		err := m.db.QueryRow("SELECT MAX(`batch`) FROM `migrations`").Scan(&lastBatch)
-		if err != nil || !lastBatch.Valid {
+		if err != nil {
+			return fmt.Errorf("failed to query max batch: %w", err)
+		}
+		if !lastBatch.Valid {
 			fmt.Println("Nothing to rollback.")
 			return nil
 		}
@@ -282,7 +286,13 @@ func (m *Migrator) Reset() error {
 
 // Refresh rolls back the latest batch (or step) and runs migrate
 func (m *Migrator) Refresh(step int) error {
-	if err := m.Rollback(step); err != nil {
+	var err error
+	if step > 0 {
+		err = m.Rollback(step)
+	} else {
+		err = m.Reset()
+	}
+	if err != nil {
 		return err
 	}
 	return m.Migrate()
@@ -292,12 +302,28 @@ func (m *Migrator) Refresh(step int) error {
 func (m *Migrator) Fresh(dbName string) error {
 	fmt.Println("Dropping all tables...")
 
-	if _, err := m.db.Exec("SET FOREIGN_KEY_CHECKS = 0;"); err != nil {
+	if err := m.dropAllTables(dbName); err != nil {
+		return err
+	}
+
+	fmt.Println("Dropped all tables successfully.")
+	return m.Migrate()
+}
+
+func (m *Migrator) dropAllTables(dbName string) error {
+	ctx := context.Background()
+	conn, err := m.db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get dedicated database connection: %w", err)
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 0;"); err != nil {
 		return fmt.Errorf("failed to disable foreign key checks: %w", err)
 	}
-	defer m.db.Exec("SET FOREIGN_KEY_CHECKS = 1;")
+	defer conn.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 1;")
 
-	rows, err := m.db.Query(`
+	rows, err := conn.QueryContext(ctx, `
 		SELECT table_name 
 		FROM information_schema.tables 
 		WHERE table_schema = ? AND table_type = 'BASE TABLE'`, dbName)
@@ -320,13 +346,12 @@ func (m *Migrator) Fresh(dbName string) error {
 
 	for _, table := range tables {
 		dropQuery := fmt.Sprintf("DROP TABLE IF EXISTS `%s`;", table)
-		if _, err := m.db.Exec(dropQuery); err != nil {
+		if _, err := conn.ExecContext(ctx, dropQuery); err != nil {
 			return fmt.Errorf("failed to drop table %s: %w", table, err)
 		}
 	}
 
-	fmt.Println("Dropped all tables successfully.")
-	return m.Migrate()
+	return nil
 }
 
 // Status returns the migration status list
