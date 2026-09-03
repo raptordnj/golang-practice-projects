@@ -6,12 +6,18 @@ A modern, full-stack Employee Management system featuring a **Next.js (React 19 
 
 ```
 go-mvc/
+├── cmd/
+│   └── migrate/
+│       └── main.go             # Database migration CLI runner
 ├── conf/
-│   └── app.conf               # Application & DB configuration
+│   └── app.conf                # Application & DB configuration
 ├── controllers/
 │   └── employee_controller.go  # HTTP request handlers
 ├── dto/
 │   └── employee_dto.go         # Request/Response DTOs
+├── migrations/                 # Embedded SQL migration files
+│   ├── 000001_create_employees_table.up.sql
+│   └── 000001_create_employees_table.down.sql
 ├── models/
 │   └── employee.go             # Database entity (ORM model)
 ├── repositories/
@@ -71,7 +77,17 @@ password =
 name = employee_db
 ```
 
-### 3. Install Dependencies & Run
+Alternatively, environment variables can be used (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`).
+
+### 3. Run Database Migrations
+
+Apply schema migrations using the CLI runner:
+
+```bash
+go run cmd/migrate/main.go up
+```
+
+### 4. Install Dependencies & Run
 
 ```bash
 go mod tidy
@@ -79,6 +95,30 @@ go run main.go
 ```
 
 The server starts on **http://localhost:8080**. Tables are auto-created via `orm.RunSyncdb`.
+
+## Database Migrations
+
+WorkPulse uses [`golang-migrate`](https://github.com/golang-migrate/migrate) for version-controlled schema migrations with embedded SQL scripts. A standalone CLI runner is provided in `cmd/migrate/main.go`.
+
+### CLI Commands
+
+| Command | Description |
+|---|---|
+| `go run cmd/migrate/main.go up` | Apply all pending migrations |
+| `go run cmd/migrate/main.go up <n>` | Apply next `n` migrations (e.g. `up 1`) |
+| `go run cmd/migrate/main.go down` | Roll back all applied migrations |
+| `go run cmd/migrate/main.go down <n>` | Roll back `n` migrations (e.g. `down 1`) |
+| `go run cmd/migrate/main.go version` | Print current schema migration version and dirty status |
+| `go run cmd/migrate/main.go force <version>` | Force set migration version (used to recover from a dirty state) |
+
+### Configuration Resolution & Auto-Creation
+
+The migration CLI automatically resolves database configuration in the following order:
+1. Environment variables (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`)
+2. Configuration file `conf/app.conf` (under the `[db]` section)
+3. Default fallbacks (`127.0.0.1:3306`, user: `root`, database: `employee_db`)
+
+If the target database does not exist, the migration runner automatically creates it with `utf8mb4` encoding before executing migrations.
 
 ## API Endpoints
 
