@@ -1,6 +1,6 @@
 # WorkPulse — Fullstack Employee CRUD Application
 
-A modern, full-stack Employee Management system featuring a **Next.js (React 19 + Tailwind CSS v4 + shadcn/ui)** frontend paired with a high-performance **Beego v2 (Go)** REST API and **MySQL**.
+A modern, full-stack Employee Management system featuring a **Next.js (React 19 + Tailwind CSS v4 + shadcn/ui)** frontend paired with a high-performance **Beego v2 (Go)** REST API, **MySQL**, and **JWT Authentication**.
 
 ## Architecture
 
@@ -10,29 +10,40 @@ go-mvc/
 │   └── migrate/
 │       └── main.go             # Database migration CLI runner
 ├── conf/
-│   └── app.conf                # Application & DB configuration
+│   └── app.conf                # Application, DB & JWT configuration
 ├── controllers/
-│   └── employee_controller.go  # HTTP request handlers
+│   ├── auth_controller.go      # Authentication handlers (register, login, me)
+│   └── employee_controller.go  # Employee request handlers
 ├── dto/
-│   └── employee_dto.go         # Request/Response DTOs
+│   ├── auth_dto.go             # Auth request/response DTOs
+│   └── employee_dto.go         # Employee request/response DTOs
+├── middlewares/
+│   └── jwt_auth.go             # JWT Bearer token authentication filter
 ├── migrations/                 # Embedded SQL migration files
 │   ├── 000001_create_employees_table.up.sql
-│   └── 000001_create_employees_table.down.sql
+│   ├── 000001_create_employees_table.down.sql
+│   ├── 000002_create_users_table.up.sql
+│   └── 000002_create_users_table.down.sql
 ├── models/
-│   └── employee.go             # Database entity (ORM model)
+│   ├── employee.go             # Employee database entity (ORM model)
+│   └── user.go                 # User database entity (ORM model)
 ├── repositories/
-│   └── employee_repository.go  # Data access layer (interface + impl)
+│   ├── employee_repository.go  # Employee data access layer (interface + impl)
+│   └── user_repository.go      # User data access layer (interface + impl)
 ├── services/
-│   └── employee_service.go     # Business logic layer
+│   ├── auth_service.go         # Auth business logic (bcrypt + JWT tokens)
+│   └── employee_service.go     # Employee business logic layer
 ├── routers/
-│   └── router.go               # Route definitions, CORS & DI wiring
+│   └── router.go               # Route definitions, CORS, JWT filter & DI wiring
 ├── frontend/                   # Next.js 16 + React 19 + Tailwind v4 UI
 │   ├── src/
-│   │   ├── app/                # App Router (page.tsx, layout.tsx, globals.css)
-│   │   ├── components/ui/      # shadcn/ui primitives (Button, Input, Badge, Dialog, Toast)
+│   │   ├── app/                # App Router (page.tsx, login, register, layout.tsx)
+│   │   ├── components/auth/    # Auth UI (AuthGuard)
 │   │   ├── components/employee/# Employee UI (Cards, Table, Stats, Modals)
-│   │   ├── lib/api.ts          # API client with Next.js rewrites
-│   │   └── types/              # TypeScript types
+│   │   ├── components/ui/      # shadcn/ui primitives (Button, Input, Badge, Dialog, Toast)
+│   │   ├── context/            # AuthContext (token storage, login/logout, state)
+│   │   ├── lib/api.ts          # Token-aware API client with Next.js rewrites
+│   │   └── types/              # TypeScript types (Employee, User, Auth)
 │   ├── package.json
 │   └── next.config.ts
 ├── main.go                     # Backend entry point (Auto DB creation + SyncDB)
@@ -40,13 +51,21 @@ go-mvc/
 └── go.sum
 ```
 
+## Features
+
+- **Authentication & Authorization**: User registration and login using bcrypt password hashing and HMAC-SHA256 JWT tokens with 24-hour expiration.
+- **Route Protection**: Backend JWT filter middleware safeguarding all `/api/v1/employees/*` and `/api/v1/auth/me` endpoints. Unauthenticated requests receive `401 Unauthorized`.
+- **Frontend Auth Guard & State**: React context managing token lifecycle in `localStorage`, automatic redirection of unauthenticated users to `/login`, and user header with logout functionality.
+- **Full Employee CRUD**: Create, read, update, and delete employees with pagination, search, department filtering, and responsive UI cards/table views.
+- **Database Schema Migrations**: Embedded SQL migrations managed via `golang-migrate/migrate/v4`.
+
 ## Running the Application
 
 ### 1. Start the Beego Go Backend
 ```bash
 go run .
 ```
-Backend runs on **http://localhost:8080** (automatically creates the `employee_db` database and `employees` table).
+Backend runs on **http://localhost:8080** (automatically ensures the `employee_db` database exists and syncs models).
 
 ### 2. Start the Next.js Frontend
 In a separate terminal:
@@ -54,7 +73,10 @@ In a separate terminal:
 cd frontend
 npm run dev
 ```
-Frontend runs on **http://localhost:3000**. All API calls are transparently proxied to the Go backend.
+Frontend runs on **http://localhost:3000**. All API calls are transparently proxied to the Go backend via Next.js rewrites.
+- Visit `http://localhost:3000` to access the employee dashboard (unauthenticated requests automatically redirect to `/login`).
+- Visit `http://localhost:3000/register` to create a new user account.
+- Visit `http://localhost:3000/login` to log into an existing user account.
 
 ## Setup
 
@@ -64,20 +86,26 @@ Frontend runs on **http://localhost:3000**. All API calls are transparently prox
 CREATE DATABASE IF NOT EXISTS employee_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-### 2. Configure Database Connection
+### 2. Configure Application & Database Connection
 
-Edit `conf/app.conf` if your MySQL credentials differ:
+Edit `conf/app.conf` if your MySQL credentials or JWT secret differ:
 
 ```ini
+appname = go-mvc
+httpport = 8080
+runmode = dev
+copyrequestbody = true
+jwt_secret = workpulse_super_secret_jwt_key_2026
+
 [db]
 host = 127.0.0.1
 port = 3306
 user = root
-password =
+password = root
 name = employee_db
 ```
 
-Alternatively, environment variables can be used (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`).
+Alternatively, environment variables can be used (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `JWT_SECRET`).
 
 ### 3. Run Database Migrations
 
@@ -87,6 +115,12 @@ Apply schema migrations using the CLI runner:
 go run cmd/migrate/main.go up
 ```
 
+To verify the migration version:
+```bash
+go run cmd/migrate/main.go version
+```
+Expected output: `Current version: 2 (dirty: false)`.
+
 ### 4. Install Dependencies & Run
 
 ```bash
@@ -94,7 +128,7 @@ go mod tidy
 go run main.go
 ```
 
-The server starts on **http://localhost:8080**. Tables are auto-created via `orm.RunSyncdb`.
+The server starts on **http://localhost:8080**.
 
 ## Database Migrations
 
@@ -111,32 +145,120 @@ WorkPulse uses [`golang-migrate`](https://github.com/golang-migrate/migrate) for
 | `go run cmd/migrate/main.go version` | Print current schema migration version and dirty status |
 | `go run cmd/migrate/main.go force <version>` | Force set migration version (used to recover from a dirty state) |
 
-### Configuration Resolution & Auto-Creation
+### Migration History
 
-The migration CLI automatically resolves database configuration in the following order:
-1. Environment variables (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`)
-2. Configuration file `conf/app.conf` (under the `[db]` section)
-3. Default fallbacks (`127.0.0.1:3306`, user: `root`, database: `employee_db`)
-
-If the target database does not exist, the migration runner automatically creates it with `utf8mb4` encoding before executing migrations.
+1. `000001_create_employees_table`: Creates the `employees` table.
+2. `000002_create_users_table`: Creates the `users` table with unique `email` index and hashed passwords.
 
 ## API Endpoints
 
-| Method   | Endpoint                  | Description          |
-|----------|---------------------------|----------------------|
-| `POST`   | `/api/v1/employees`       | Create employee      |
-| `GET`    | `/api/v1/employees`       | List all (paginated) |
-| `GET`    | `/api/v1/employees/:id`   | Get by ID            |
-| `PUT`    | `/api/v1/employees/:id`   | Update employee      |
-| `DELETE` | `/api/v1/employees/:id`   | Delete employee      |
+### Authentication Endpoints
+
+| Method | Endpoint | Auth Required | Description |
+|---|---|---|---|
+| `POST` | `/api/v1/auth/register` | No | Register a new user account and obtain JWT token |
+| `POST` | `/api/v1/auth/login` | No | Log in with email & password and obtain JWT token |
+| `GET` | `/api/v1/auth/me` | **Yes** (Bearer Token) | Retrieve authenticated user profile |
+
+### Employee Endpoints (Protected)
+
+> [!IMPORTANT]
+> All employee endpoints require authentication. Requests must supply a valid JWT token via the `Authorization: Bearer <token>` header. Unauthenticated requests receive HTTP `401 Unauthorized`.
+
+| Method   | Endpoint                  | Auth Required          | Description          |
+|----------|---------------------------|------------------------|----------------------|
+| `POST`   | `/api/v1/employees`       | **Yes** (Bearer Token) | Create employee      |
+| `GET`    | `/api/v1/employees`       | **Yes** (Bearer Token) | List all (paginated) |
+| `GET`    | `/api/v1/employees/:id`   | **Yes** (Bearer Token) | Get by ID            |
+| `PUT`    | `/api/v1/employees/:id`   | **Yes** (Bearer Token) | Update employee      |
+| `DELETE` | `/api/v1/employees/:id`   | **Yes** (Bearer Token) | Delete employee      |
 
 ## Usage Examples
 
-### Create Employee
+### 1. Register User
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "password": "password123"
+  }'
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "User registered successfully",
+  "data": {
+    "token": "<JWT_TOKEN>",
+    "user": {
+      "id": 1,
+      "name": "Jane Doe",
+      "email": "jane@example.com",
+      "created_at": "2026-09-03T13:41:37Z"
+    }
+  }
+}
+```
+
+### 2. Login User
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "jane@example.com",
+    "password": "password123"
+  }'
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "token": "<JWT_TOKEN>",
+    "user": {
+      "id": 1,
+      "name": "Jane Doe",
+      "email": "jane@example.com",
+      "created_at": "2026-09-03T13:41:37Z"
+    }
+  }
+}
+```
+
+### 3. Get Current User Profile
+
+```bash
+curl -X GET http://localhost:8080/api/v1/auth/me \
+  -H "Authorization: Bearer <JWT_TOKEN>"
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "",
+  "data": {
+    "id": 1,
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "created_at": "2026-09-03T13:41:37Z"
+  }
+}
+```
+
+### 4. Create Employee (Authenticated)
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/employees \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <JWT_TOKEN>" \
   -d '{
     "first_name": "John",
     "last_name": "Doe",
@@ -149,33 +271,37 @@ curl -X POST http://localhost:8080/api/v1/employees \
   }'
 ```
 
-### List Employees (Paginated)
+### 5. List Employees (Authenticated & Paginated)
 
 ```bash
-curl "http://localhost:8080/api/v1/employees?page=1&page_size=10"
+curl -X GET "http://localhost:8080/api/v1/employees?page=1&page_size=10" \
+  -H "Authorization: Bearer <JWT_TOKEN>"
 ```
 
-### Get Employee by ID
+### 6. Get Employee by ID (Authenticated)
 
 ```bash
-curl http://localhost:8080/api/v1/employees/1
+curl -X GET http://localhost:8080/api/v1/employees/1 \
+  -H "Authorization: Bearer <JWT_TOKEN>"
 ```
 
-### Update Employee
+### 7. Update Employee (Authenticated)
 
 ```bash
 curl -X PUT http://localhost:8080/api/v1/employees/1 \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <JWT_TOKEN>" \
   -d '{
     "position": "Senior Software Engineer",
     "salary": 105000.00
   }'
 ```
 
-### Delete Employee
+### 8. Delete Employee (Authenticated)
 
 ```bash
-curl -X DELETE http://localhost:8080/api/v1/employees/1
+curl -X DELETE http://localhost:8080/api/v1/employees/1 \
+  -H "Authorization: Bearer <JWT_TOKEN>"
 ```
 
 ## Response Format
@@ -223,5 +349,14 @@ curl -X DELETE http://localhost:8080/api/v1/employees/1
 {
   "success": false,
   "message": "employee not found"
+}
+```
+
+### Unauthorized Error Response (HTTP 401)
+
+```json
+{
+  "success": false,
+  "message": "Authorization token is missing or malformed"
 }
 ```
