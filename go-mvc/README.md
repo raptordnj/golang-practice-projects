@@ -20,10 +20,10 @@ go-mvc/
 ├── middlewares/
 │   └── jwt_auth.go             # JWT Bearer token authentication filter
 ├── migrations/                 # Embedded SQL migration files
-│   ├── 000001_create_employees_table.up.sql
-│   ├── 000001_create_employees_table.down.sql
-│   ├── 000002_create_users_table.up.sql
-│   └── 000002_create_users_table.down.sql
+│   ├── 2026_09_03_000001_create_employees_table.up.sql
+│   ├── 2026_09_03_000001_create_employees_table.down.sql
+│   ├── 2026_09_03_000002_create_users_table.up.sql
+│   └── 2026_09_03_000002_create_users_table.down.sql
 ├── models/
 │   ├── employee.go             # Employee database entity (ORM model)
 │   └── user.go                 # User database entity (ORM model)
@@ -57,7 +57,7 @@ go-mvc/
 - **Route Protection**: Backend JWT filter middleware safeguarding all `/api/v1/employees/*` and `/api/v1/auth/me` endpoints. Unauthenticated requests receive `401 Unauthorized`.
 - **Frontend Auth Guard & State**: React context managing token lifecycle in `localStorage`, automatic redirection of unauthenticated users to `/login`, and user header with logout functionality.
 - **Full Employee CRUD**: Create, read, update, and delete employees with pagination, search, department filtering, and responsive UI cards/table views.
-- **Database Schema Migrations**: Embedded SQL migrations managed via `golang-migrate/migrate/v4`.
+- **Database Schema Migrations**: Embedded SQL migrations managed via a custom Laravel Artisan-style migrator supporting migration batches, rollbacks, resets, refreshes, fresh database drops, and tabular status reporting.
 
 ## Running the Application
 
@@ -109,17 +109,25 @@ Alternatively, environment variables can be used (`DB_HOST`, `DB_PORT`, `DB_USER
 
 ### 3. Run Database Migrations
 
-Apply schema migrations using the CLI runner:
+Apply schema migrations using the Laravel-style CLI runner:
 
 ```bash
-go run cmd/migrate/main.go up
+go run cmd/migrate/main.go migrate
 ```
 
-To verify the migration version:
+To verify migration status:
 ```bash
-go run cmd/migrate/main.go version
+go run cmd/migrate/main.go migrate:status
 ```
-Expected output: `Current version: 2 (dirty: false)`.
+Expected output:
+```text
++------+------------------------------------------+---------+
+| Ran? | Migration                                | Batch   |
++------+------------------------------------------+---------+
+| Yes  | 2026_09_03_000001_create_employees_table | 1       |
+| Yes  | 2026_09_03_000002_create_users_table     | 1       |
++------+------------------------------------------+---------+
+```
 
 ### 4. Install Dependencies & Run
 
@@ -132,23 +140,62 @@ The server starts on **http://localhost:8080**.
 
 ## Database Migrations
 
-WorkPulse uses [`golang-migrate`](https://github.com/golang-migrate/migrate) for version-controlled schema migrations with embedded SQL scripts. A standalone CLI runner is provided in `cmd/migrate/main.go`.
+WorkPulse features a custom **Laravel Artisan-style database migration system** built in Go, utilizing embedded SQL migration scripts (`embed.FS`) and an internal `migrations` tracking table (`id`, `migration`, `batch`).
+
+### Migration Batching
+
+Migrations are organized and executed in **batches**:
+- When `migrate` runs, all newly applied migrations are assigned the same incremental **Batch** number (e.g., Batch 1, Batch 2, etc.).
+- When `migrate:rollback` runs without options, it rolls back only migrations belonging to the **latest batch**. This allows multi-file feature additions to be rolled back cleanly in a single operation without affecting earlier schema changes.
+- Rollbacks can also target specific counts with `--step=N` (e.g., `--step=1` rolls back only the most recent migration, regardless of batch).
 
 ### CLI Commands
 
-| Command | Description |
-|---|---|
-| `go run cmd/migrate/main.go up` | Apply all pending migrations |
-| `go run cmd/migrate/main.go up <n>` | Apply next `n` migrations (e.g. `up 1`) |
-| `go run cmd/migrate/main.go down` | Roll back all applied migrations |
-| `go run cmd/migrate/main.go down <n>` | Roll back `n` migrations (e.g. `down 1`) |
-| `go run cmd/migrate/main.go version` | Print current schema migration version and dirty status |
-| `go run cmd/migrate/main.go force <version>` | Force set migration version (used to recover from a dirty state) |
+The migration CLI is located at `cmd/migrate/main.go`. It supports both Laravel Artisan syntax (`migrate:*`) and shorthand aliases (`up`, `down`, `status`, etc.):
+
+| Command | Shorthand Alias | Description |
+|---|---|---|
+| `go run cmd/migrate/main.go migrate` | `up` | Run all pending migrations in a new incremental batch |
+| `go run cmd/migrate/main.go migrate:rollback` | `rollback`, `down` | Roll back migrations from the latest executed batch |
+| `go run cmd/migrate/main.go migrate:rollback --step=N` | `down <n>`, `rollback <n>` | Roll back the last `N` migrations across batches |
+| `go run cmd/migrate/main.go migrate:status` | `status` | Display a formatted ASCII table of all migrations, execution status (`Yes`/`No`), and batch numbers |
+| `go run cmd/migrate/main.go migrate:reset` | `reset` | Roll back all migrations in the database across all batches in reverse chronological order |
+| `go run cmd/migrate/main.go migrate:refresh` | `refresh` | Roll back all migrations and re-run them from scratch |
+| `go run cmd/migrate/main.go migrate:refresh --step=N` | `refresh <n>` | Roll back the last `N` migrations and re-run migrations |
+| `go run cmd/migrate/main.go migrate:fresh` | `fresh` | Drop all database tables completely (disabling foreign keys during drop) and re-run all migrations |
+| `go run cmd/migrate/main.go make:migration <name>` | `make <name>` | Generate timestamped `.up.sql` and `.down.sql` migration stub files in `migrations/` |
+
+### Status Table Output Example
+
+Checking the database migration status via `go run cmd/migrate/main.go migrate:status`:
+
+```text
++------+------------------------------------------+---------+
+| Ran? | Migration                                | Batch   |
++------+------------------------------------------+---------+
+| Yes  | 2026_09_03_000001_create_employees_table | 1       |
+| Yes  | 2026_09_03_000002_create_users_table     | 1       |
++------+------------------------------------------+---------+
+```
+
+### Creating New Migrations
+
+To scaffold a new migration, run `make:migration`:
+
+```bash
+go run cmd/migrate/main.go make:migration create_departments_table
+```
+
+This creates:
+- `migrations/YYYY_MM_DD_HHMMSS_create_departments_table.up.sql`
+- `migrations/YYYY_MM_DD_HHMMSS_create_departments_table.down.sql`
+
+Populate the generated SQL files with DDL statements and apply them with `go run cmd/migrate/main.go migrate`.
 
 ### Migration History
 
-1. `000001_create_employees_table`: Creates the `employees` table.
-2. `000002_create_users_table`: Creates the `users` table with unique `email` index and hashed passwords.
+1. `2026_09_03_000001_create_employees_table`: Creates the `employees` table.
+2. `2026_09_03_000002_create_users_table`: Creates the `users` table with unique `email` index and hashed passwords.
 
 ## API Endpoints
 
