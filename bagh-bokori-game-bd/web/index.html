@@ -1,0 +1,74 @@
+<!doctype html>
+<!--
+  WebAssembly / WebGL host page for বাঘবন্দী.
+
+  The Go binary loaded here is the *same program* as the desktop build - the
+  same engine, the same AI, the same Fyne UI. Fyne's renderer targets OpenGL
+  on the desktop and WebGL here, so nothing in the game needed rewriting.
+
+  Build with:  ./build-wasm.sh     then serve this directory over HTTP.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>বাঘবন্দী · Bagh-Bandi</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #2a1c14;
+      color: #f2eadd;
+      font-family: system-ui, -apple-system, "Noto Sans Bengali", sans-serif;
+      overflow: hidden;
+    }
+    #loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      text-align: center;
+      padding: 1rem;
+    }
+    #loading h1 { margin: 0; font-size: clamp(1.5rem, 6vw, 2.5rem); }
+    #loading p { margin: 0; opacity: 0.75; font-size: 0.95rem; }
+    #error { color: #ff7a7a; max-width: 40rem; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <h1>বাঘবন্দী</h1>
+    <p id="status">Loading the game…</p>
+    <p id="error"></p>
+  </div>
+
+  <script src="wasm_exec.js"></script>
+  <script>
+    const status = document.getElementById("status");
+    const errorBox = document.getElementById("error");
+
+    if (!("WebAssembly" in window)) {
+      errorBox.textContent = "This browser does not support WebAssembly.";
+    } else if (!document.createElement("canvas").getContext("webgl")) {
+      errorBox.textContent = "This browser does not support WebGL, which the board renderer needs.";
+    } else {
+      const go = new Go();
+      WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject)
+        .then((result) => {
+          status.textContent = "Starting…";
+          document.getElementById("loading").remove();
+          return go.run(result.instance);
+        })
+        .catch((err) => {
+          status.textContent = "Could not start the game.";
+          errorBox.textContent = String(err);
+        });
+    }
+  </script>
+</body>
+</html>

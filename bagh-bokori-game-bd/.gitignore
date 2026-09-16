@@ -1,0 +1,16 @@
+# build output
+/bagh-bandi
+/bagh-bandi.exe
+/build/
+
+# Fyne packaging artefacts
+*.app/
+*.dmg
+*.deb
+*.rpm
+*.apk
+
+# editors and OS noise
+.DS_Store
+.idea/
+.vscode/

@@ -10,6 +10,11 @@ __debug_bin*
 sysmon
 midi2mmf
 web_server/web_server
+retro-maze
+*.deb
+*.rpm
+*.apk
+packman/packman.deb/usr/bin/
 
 # Node / Frontend
 node_modules/
@@ -26,5 +31,6 @@ dist-ssr/
 .DS_Store
 .idea/
 .vscode/
+.commandcode/
 *.swp
 *~
