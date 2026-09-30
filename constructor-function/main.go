@@ -13,4 +13,8 @@ func main() {
 	p2 := classes.NewPerson("Arman Hossain", 28)
 	fmt.Println(p2.Name)
 	fmt.Println(p2.Age)
+	conf := classes.NewConfig("127.0.0.1")
+	fmt.Println(conf.Host)
+	fmt.Println(conf.Port)
+	fmt.Println(conf.Timeout)
 }
